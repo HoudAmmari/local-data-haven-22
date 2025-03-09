@@ -1,16 +1,16 @@
-
 /**
  * API Server that handles API requests from external applications
  */
 
+import { validateApiKey } from './apiKey';
 import {
   getAllFiles,
   getFileById,
   saveFile,
   updateFile,
-  deleteFile,
-  getStorageStats
-} from './apiService';
+  deleteFile
+} from './apiFileOperations';
+import { getStorageStats } from './apiStorageStats';
 
 // Endpoints to handle
 const endpoints = [
