@@ -29,9 +29,12 @@ export const setupApiServer = () => {
   
   // Override fetch to intercept API calls
   window.fetch = function(input, init) {
-    const url = input instanceof Request ? input.url : String(input);
-    const method = input instanceof Request 
-      ? input.method 
+    // Convert URL objects to strings to ensure compatibility
+    const inputUrl = input instanceof URL ? input.toString() : input;
+    
+    const url = inputUrl instanceof Request ? inputUrl.url : String(inputUrl);
+    const method = inputUrl instanceof Request 
+      ? inputUrl.method 
       : (init?.method || 'GET');
     
     // Check if this is an API request
@@ -45,11 +48,11 @@ export const setupApiServer = () => {
     });
     
     if (isApiRequest) {
-      return handleApiRequest(url, method, input, init);
+      return handleApiRequest(url, method, inputUrl, init);
     }
     
     // Not an API request, pass through to original fetch
-    return originalFetch.apply(this, [input, init]);
+    return originalFetch.apply(this, [inputUrl, init]);
   };
   
   console.log('LocalDataHaven API server is running');
