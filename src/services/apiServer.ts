@@ -55,7 +55,7 @@ export const setupApiServer = () => {
     return originalFetch.apply(this, [inputUrl, init]);
   };
   
-  console.log('LocalDataHaven API server is running');
+  console.log('LocalDataHaven API server is running with IndexedDB storage');
 };
 
 // Handle API requests
@@ -78,11 +78,11 @@ const handleApiRequest = async (url: string, method: string, input: RequestInfo,
     // Route the request to the appropriate handler
     if (pathname === '/api/files') {
       if (method === 'GET') {
-        const result = getAllFiles(apiKey);
+        const result = await getAllFiles(apiKey);
         return createResponse(result, result.success ? 200 : 401);
       } else if (method === 'POST') {
         const body = await getRequestBody(input, init);
-        const result = saveFile(apiKey, body);
+        const result = await saveFile(apiKey, body);
         return createResponse(result, result.success ? 201 : 401);
       }
     } 
@@ -90,22 +90,22 @@ const handleApiRequest = async (url: string, method: string, input: RequestInfo,
       const fileId = pathname.split('/').pop() || '';
       
       if (method === 'GET') {
-        const result = getFileById(apiKey, fileId);
+        const result = await getFileById(apiKey, fileId);
         return createResponse(result, result.success ? 200 : result.error === 'File not found' ? 404 : 401);
       } 
       else if (method === 'PUT') {
         const body = await getRequestBody(input, init);
-        const result = updateFile(apiKey, fileId, body);
+        const result = await updateFile(apiKey, fileId, body);
         return createResponse(result, result.success ? 200 : result.error === 'File not found' ? 404 : 401);
       } 
       else if (method === 'DELETE') {
-        const result = deleteFile(apiKey, fileId);
+        const result = await deleteFile(apiKey, fileId);
         return createResponse(result, result.success ? 200 : result.error === 'File not found' ? 404 : 401);
       }
     } 
     else if (pathname === '/api/stats') {
       if (method === 'GET') {
-        const result = getStorageStats(apiKey);
+        const result = await getStorageStats(apiKey);
         return createResponse(result, result.success ? 200 : 401);
       }
     }

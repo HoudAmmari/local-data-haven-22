@@ -1,5 +1,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
+import { 
+  getAllFilesFromDB, 
+  saveFileToDB, 
+  deleteFileFromDB, 
+  clearAllData, 
+  getStorageStatsFromDB 
+} from '@/services/indexedDBService';
 
 export type FileData = {
   id: string;
@@ -15,10 +22,8 @@ export type StorageData = {
   files: FileData[];
   totalSize: number;
   lastUpdated: number;
-  fileCount?: number; // Added fileCount as an optional property
+  fileCount?: number;
 };
-
-const STORAGE_KEY = 'local_data_haven';
 
 const initialStorageData: StorageData = {
   files: [],
@@ -26,44 +31,29 @@ const initialStorageData: StorageData = {
   lastUpdated: Date.now(),
 };
 
-const isStorageAvailable = (type: string): boolean => {
-  try {
-    const storage = window[type as "localStorage" | "sessionStorage"];
-    const x = '__storage_test__';
-    storage.setItem(x, x);
-    storage.removeItem(x);
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
-
 export const useLocalStorage = () => {
   const [data, setData] = useState<StorageData>(initialStorageData);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Load data from localStorage on mount
+  // Load data from IndexedDB on mount
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       setIsLoading(true);
       try {
-        if (!isStorageAvailable('localStorage')) {
-          throw new Error('localStorage is not available');
-        }
+        const files = await getAllFilesFromDB();
+        const stats = await getStorageStatsFromDB();
         
-        const storedData = localStorage.getItem(STORAGE_KEY);
-        
-        if (storedData) {
-          setData(JSON.parse(storedData));
-        } else {
-          // Initialize with empty data
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(initialStorageData));
-        }
+        setData({
+          files,
+          totalSize: stats.totalSize,
+          lastUpdated: stats.lastUpdated,
+          fileCount: stats.fileCount
+        });
         
         setError(null);
       } catch (err) {
-        console.error('Error loading data from localStorage:', err);
+        console.error('Error loading data from IndexedDB:', err);
         setError('Failed to load data from storage');
       } finally {
         setIsLoading(false);
@@ -73,62 +63,74 @@ export const useLocalStorage = () => {
     loadData();
   }, []);
   
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    if (!isLoading && !error) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      } catch (err) {
-        console.error('Error saving data to localStorage:', err);
-        setError('Failed to save data to storage');
-      }
+  const addFile = useCallback(async (file: FileData) => {
+    try {
+      await saveFileToDB(file);
+      
+      setData((prevData) => {
+        // Check if file with same id already exists
+        const fileExists = prevData.files.some((f) => f.id === file.id);
+        
+        let newFiles;
+        if (fileExists) {
+          // Update existing file
+          newFiles = prevData.files.map((f) => (f.id === file.id ? file : f));
+        } else {
+          // Add new file
+          newFiles = [...prevData.files, file];
+        }
+        
+        // Calculate new total size
+        const newTotalSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+        
+        return {
+          files: newFiles,
+          totalSize: newTotalSize,
+          lastUpdated: Date.now(),
+          fileCount: newFiles.length
+        };
+      });
+    } catch (err) {
+      console.error('Error saving file to IndexedDB:', err);
+      setError('Failed to save file to storage');
     }
-  }, [data, isLoading, error]);
-  
-  const addFile = useCallback((file: FileData) => {
-    setData((prevData) => {
-      // Check if file with same id already exists
-      const fileExists = prevData.files.some((f) => f.id === file.id);
-      
-      let newFiles;
-      if (fileExists) {
-        // Update existing file
-        newFiles = prevData.files.map((f) => (f.id === file.id ? file : f));
-      } else {
-        // Add new file
-        newFiles = [...prevData.files, file];
-      }
-      
-      // Calculate new total size
-      const newTotalSize = newFiles.reduce((sum, f) => sum + f.size, 0);
-      
-      return {
-        files: newFiles,
-        totalSize: newTotalSize,
-        lastUpdated: Date.now(),
-      };
-    });
   }, []);
   
-  const deleteFile = useCallback((fileId: string) => {
-    setData((prevData) => {
-      const newFiles = prevData.files.filter((f) => f.id !== fileId);
-      const newTotalSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+  const deleteFile = useCallback(async (fileId: string) => {
+    try {
+      await deleteFileFromDB(fileId);
       
-      return {
-        files: newFiles,
-        totalSize: newTotalSize,
-        lastUpdated: Date.now(),
-      };
-    });
+      setData((prevData) => {
+        const newFiles = prevData.files.filter((f) => f.id !== fileId);
+        const newTotalSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+        
+        return {
+          files: newFiles,
+          totalSize: newTotalSize,
+          lastUpdated: Date.now(),
+          fileCount: newFiles.length
+        };
+      });
+    } catch (err) {
+      console.error('Error deleting file from IndexedDB:', err);
+      setError('Failed to delete file from storage');
+    }
   }, []);
   
-  const clearAllFiles = useCallback(() => {
-    setData({
-      files: [],
-      totalSize: 0,
-      lastUpdated: Date.now(),
-    });
+  const clearAllFiles = useCallback(async () => {
+    try {
+      await clearAllData();
+      
+      setData({
+        files: [],
+        totalSize: 0,
+        lastUpdated: Date.now(),
+        fileCount: 0
+      });
+    } catch (err) {
+      console.error('Error clearing data from IndexedDB:', err);
+      setError('Failed to clear storage');
+    }
   }, []);
   
   return {

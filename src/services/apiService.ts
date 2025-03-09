@@ -5,9 +5,15 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { FileData, StorageData } from '@/hooks/useLocalStorage';
+import {
+  getAllFilesFromDB,
+  getFileByIdFromDB,
+  saveFileToDB,
+  deleteFileFromDB,
+  getStorageStatsFromDB
+} from './indexedDBService';
 
 // Constants
-const STORAGE_KEY = 'local_data_haven';
 const API_KEY_STORAGE = 'local_data_haven_api_key';
 
 // Types
@@ -36,14 +42,14 @@ const validateApiKey = (providedKey: string): boolean => {
 };
 
 // Get all files
-export const getAllFiles = (apiKey: string): ApiResponse<FileData[]> => {
+export const getAllFiles = async (apiKey: string): Promise<ApiResponse<FileData[]>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
-    return { success: true, data: data.files };
+    const files = await getAllFilesFromDB();
+    return { success: true, data: files };
   } catch (error) {
     console.error('API error:', error);
     return { success: false, error: 'Failed to retrieve files' };
@@ -51,14 +57,13 @@ export const getAllFiles = (apiKey: string): ApiResponse<FileData[]> => {
 };
 
 // Get a specific file by ID
-export const getFileById = (apiKey: string, fileId: string): ApiResponse<FileData> => {
+export const getFileById = async (apiKey: string, fileId: string): Promise<ApiResponse<FileData>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
-    const file = data.files.find(f => f.id === fileId);
+    const file = await getFileByIdFromDB(fileId);
     
     if (!file) {
       return { success: false, error: 'File not found' };
@@ -72,24 +77,19 @@ export const getFileById = (apiKey: string, fileId: string): ApiResponse<FileDat
 };
 
 // Add or update a file
-export const saveFile = (apiKey: string, file: Omit<FileData, 'id'>): ApiResponse<FileData> => {
+export const saveFile = async (apiKey: string, file: Omit<FileData, 'id'>): Promise<ApiResponse<FileData>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
     const newFile: FileData = {
       ...file,
       id: uuidv4(),
       lastModified: Date.now()
     };
     
-    data.files.push(newFile);
-    data.totalSize = data.files.reduce((sum, f) => sum + f.size, 0);
-    data.lastUpdated = Date.now();
-    
-    saveStorageData(data);
+    await saveFileToDB(newFile);
     
     return { success: true, data: newFile };
   } catch (error) {
@@ -99,30 +99,25 @@ export const saveFile = (apiKey: string, file: Omit<FileData, 'id'>): ApiRespons
 };
 
 // Update an existing file
-export const updateFile = (apiKey: string, fileId: string, updates: Partial<FileData>): ApiResponse<FileData> => {
+export const updateFile = async (apiKey: string, fileId: string, updates: Partial<FileData>): Promise<ApiResponse<FileData>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
-    const fileIndex = data.files.findIndex(f => f.id === fileId);
+    const existingFile = await getFileByIdFromDB(fileId);
     
-    if (fileIndex === -1) {
+    if (!existingFile) {
       return { success: false, error: 'File not found' };
     }
     
     const updatedFile = {
-      ...data.files[fileIndex],
+      ...existingFile,
       ...updates,
       lastModified: Date.now()
     };
     
-    data.files[fileIndex] = updatedFile;
-    data.totalSize = data.files.reduce((sum, f) => sum + f.size, 0);
-    data.lastUpdated = Date.now();
-    
-    saveStorageData(data);
+    await saveFileToDB(updatedFile);
     
     return { success: true, data: updatedFile };
   } catch (error) {
@@ -132,25 +127,19 @@ export const updateFile = (apiKey: string, fileId: string, updates: Partial<File
 };
 
 // Delete a file
-export const deleteFile = (apiKey: string, fileId: string): ApiResponse<{ deleted: boolean }> => {
+export const deleteFile = async (apiKey: string, fileId: string): Promise<ApiResponse<{ deleted: boolean }>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
-    const initialLength = data.files.length;
+    const existingFile = await getFileByIdFromDB(fileId);
     
-    data.files = data.files.filter(f => f.id !== fileId);
-    
-    if (data.files.length === initialLength) {
+    if (!existingFile) {
       return { success: false, error: 'File not found' };
     }
     
-    data.totalSize = data.files.reduce((sum, f) => sum + f.size, 0);
-    data.lastUpdated = Date.now();
-    
-    saveStorageData(data);
+    await deleteFileFromDB(fileId);
     
     return { success: true, data: { deleted: true } };
   } catch (error) {
@@ -160,44 +149,20 @@ export const deleteFile = (apiKey: string, fileId: string): ApiResponse<{ delete
 };
 
 // Get storage stats
-export const getStorageStats = (apiKey: string): ApiResponse<Omit<StorageData, 'files'> & { fileCount: number }> => {
+export const getStorageStats = async (apiKey: string): Promise<ApiResponse<Omit<StorageData, 'files'> & { fileCount: number }>> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }
   
   try {
-    const data = getStorageData();
-    const { files, ...stats } = data;
+    const stats = await getStorageStatsFromDB();
     
     return { 
       success: true, 
-      data: { 
-        ...stats,
-        fileCount: files.length 
-      }
+      data: stats
     };
   } catch (error) {
     console.error('API error:', error);
     return { success: false, error: 'Failed to retrieve storage stats' };
   }
-};
-
-// Helper to get storage data
-const getStorageData = (): StorageData => {
-  const storedData = localStorage.getItem(STORAGE_KEY);
-  if (!storedData) {
-    const initialData: StorageData = {
-      files: [],
-      totalSize: 0,
-      lastUpdated: Date.now()
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData));
-    return initialData;
-  }
-  return JSON.parse(storedData);
-};
-
-// Helper to save storage data
-const saveStorageData = (data: StorageData): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
