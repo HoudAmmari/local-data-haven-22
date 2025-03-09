@@ -6,14 +6,26 @@ import FileTable from '@/components/FileTable';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocation } from 'react-router-dom';
-import { HardDrive, Upload } from 'lucide-react';
+import { HardDrive, Upload, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Files = () => {
-  const { data, isLoading, addFile, deleteFile } = useLocalStorage();
+  const { data, isLoading, addFile, deleteFile, clearAllFiles } = useLocalStorage();
   const location = useLocation();
   const uploadRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [showClearDialog, setShowClearDialog] = React.useState(false);
   
   // Check if URL has #upload hash and scroll to upload section
   useEffect(() => {
@@ -24,19 +36,12 @@ const Files = () => {
     }
   }, [location.hash, isLoading]);
 
-  const handleClearAll = () => {
-    if (data.files.length === 0) {
-      toast({
-        title: "No files to clear",
-        description: "Your storage is already empty.",
-      });
-      return;
-    }
-    
-    // We'd normally show a confirmation dialog here
+  const handleClearConfirm = () => {
+    clearAllFiles();
+    setShowClearDialog(false);
     toast({
-      title: "Feature coming soon",
-      description: "The ability to clear all files will be available soon.",
+      title: "Storage cleared",
+      description: "All files have been removed from local storage.",
     });
   };
   
@@ -50,16 +55,30 @@ const Files = () => {
       </div>
       
       <Tabs defaultValue={location.hash === '#upload' ? 'upload' : 'files'} className="w-full">
-        <TabsList className="grid grid-cols-2 mb-8">
-          <TabsTrigger value="files" className="flex items-center">
-            <HardDrive className="h-4 w-4 mr-2" />
-            Your Files
-          </TabsTrigger>
-          <TabsTrigger value="upload" className="flex items-center">
-            <Upload className="h-4 w-4 mr-2" />
-            Upload New Files
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex justify-between items-center mb-8">
+          <TabsList className="grid grid-cols-2">
+            <TabsTrigger value="files" className="flex items-center">
+              <HardDrive className="h-4 w-4 mr-2" />
+              Your Files
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="flex items-center">
+              <Upload className="h-4 w-4 mr-2" />
+              Upload New Files
+            </TabsTrigger>
+          </TabsList>
+          
+          {data.files.length > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center text-destructive hover:bg-destructive/10"
+              onClick={() => setShowClearDialog(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          )}
+        </div>
         
         <TabsContent value="files" className="animate-fade-in">
           {isLoading ? (
@@ -89,6 +108,27 @@ const Files = () => {
           </div>
         </TabsContent>
       </Tabs>
+      
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {data.files.length} files from your local storage.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleClearConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, delete all files
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 };
