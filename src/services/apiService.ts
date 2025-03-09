@@ -160,7 +160,7 @@ export const deleteFile = (apiKey: string, fileId: string): ApiResponse<{ delete
 };
 
 // Get storage stats
-export const getStorageStats = (apiKey: string): ApiResponse<Omit<StorageData, 'files'>> => {
+export const getStorageStats = (apiKey: string): ApiResponse<Omit<StorageData, 'files'> & { fileCount: number }> => {
   if (!validateApiKey(apiKey)) {
     return { success: false, error: 'Invalid API key' };
   }

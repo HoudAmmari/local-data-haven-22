@@ -15,6 +15,7 @@ export type StorageData = {
   files: FileData[];
   totalSize: number;
   lastUpdated: number;
+  fileCount?: number; // Added fileCount as an optional property
 };
 
 const STORAGE_KEY = 'local_data_haven';
